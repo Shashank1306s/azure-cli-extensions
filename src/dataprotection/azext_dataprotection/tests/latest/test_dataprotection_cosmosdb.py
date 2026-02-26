@@ -11,7 +11,6 @@ Tests to verify existing CLI codebase supports configure protection, trigger bac
 and restore for Azure Cosmos DB (Microsoft.DocumentDB/databaseAccounts).
 """
 
-import unittest
 from azure.cli.testsdk import ScenarioTest, live_only
 from azure.cli.testsdk.scenario_tests import AllowLargeResponse
 from ..utils import track_job_to_completion, wait_for_job_exclusivity_on_datasource
@@ -133,13 +132,23 @@ class CosmosDBBackupInstanceInitializeTest(ScenarioTest):
         test.assertEqual(ds_info.get('resource_name'), 'cosmos-mongodb-provisioned-03640a83')
         test.assertEqual(ds_info.get('object_type'), 'Datasource')
         test.assertEqual(ds_info.get('resource_location'), 'northcentralus')
-        # For non-proxy resource (isProxyResource=false), resource_uri should be the full resource ID
+        # For non-proxy resource with enableDataSourceSetInfo, resource_uri should be the full resource ID
         test.assertEqual(ds_info.get('resource_uri'), test.kwargs['cosmosDbId'],
-                         "resource_uri should equal the full resource ID for CosmosDB (non-proxy resource)")
+                         "resource_uri should equal the full resource ID for CosmosDB (enableDataSourceSetInfo=true)")
 
-        # Verify data_source_set_info is None (enableDataSourceSetInfo=false and isProxyResource=false)
+        # Verify data_source_set_info is populated (enableDataSourceSetInfo=true)
         dss_info = properties.get('data_source_set_info')
-        test.assertIsNone(dss_info, "data_source_set_info should be None since enableDataSourceSetInfo=false and isProxyResource=false")
+        test.assertIsNotNone(dss_info, "data_source_set_info should be populated since enableDataSourceSetInfo=true")
+        test.assertEqual(dss_info.get('object_type'), 'DatasourceSet')
+        test.assertEqual(dss_info.get('datasource_type'), 'Microsoft.DocumentDB/databaseAccounts')
+        test.assertEqual(dss_info.get('resource_name'), 'cosmos-mongodb-provisioned-03640a83',
+                         "DatasourceSet resource_name should be the CosmosDB account name")
+        test.assertEqual(dss_info.get('resource_type'), 'Microsoft.DocumentDB/databaseAccounts',
+                         "DatasourceSet resource_type should be Microsoft.DocumentDB/databaseAccounts")
+        test.assertEqual(dss_info.get('resource_id'), test.kwargs['cosmosDbId'],
+                         "DatasourceSet resource_id should be the full CosmosDB account resource ID")
+        test.assertEqual(dss_info.get('resource_uri'), test.kwargs['cosmosDbId'],
+                         "DatasourceSet resource_uri should be the full CosmosDB account resource ID")
 
         # Verify policy_info
         policy_info = properties.get('policy_info', {})
@@ -193,10 +202,13 @@ class CosmosDBRestoreInitializeTest(ScenarioTest):
         test.assertEqual(ds_info.get('resource_name'), 'cosmos-nosql-contin-13-sc73yna4')
         test.assertEqual(ds_info.get('resource_id'), test.kwargs['targetResourceId'])
 
-        # CosmosDB is not a proxy resource so datasource_set_info should NOT be in restore target
-        # (restore_initialize_for_data_recovery only sets it when isProxyResource=true)
+        # CosmosDB has enableDataSourceSetInfo=true, so datasource_set_info should be in restore target
         dss_info = rti.get('datasource_set_info')
-        test.assertIsNone(dss_info, "datasource_set_info should not be present in restore target for non-proxy CosmosDB")
+        test.assertIsNotNone(dss_info, "datasource_set_info should be present for CosmosDB (enableDataSourceSetInfo=true)")
+        test.assertEqual(dss_info.get('object_type'), 'DatasourceSet')
+        test.assertEqual(dss_info.get('datasource_type'), 'Microsoft.DocumentDB/databaseAccounts')
+        test.assertEqual(dss_info.get('resource_name'), 'cosmos-nosql-contin-13-sc73yna4')
+        test.assertEqual(dss_info.get('resource_id'), test.kwargs['targetResourceId'])
 
 
 class CosmosDBBackupAndRestoreScenarioTest(ScenarioTest):
@@ -208,7 +220,6 @@ class CosmosDBBackupAndRestoreScenarioTest(ScenarioTest):
 
     @AllowLargeResponse()
     @live_only()
-    @unittest.skip("Requires persistent CosmosDB resources - update kwargs and remove skip to run live")
     def test_dataprotection_backup_and_restore_cosmosdb(test):
         test.kwargs.update({
             'location': 'northcentralus',
@@ -219,9 +230,9 @@ class CosmosDBBackupAndRestoreScenarioTest(ScenarioTest):
             'sourceDataStore': 'VaultStore',
             'permissionsScope': 'ResourceGroup',
             'operation': 'Backup',
-            'cosmosDbName': 'cosmos-mongodb-provisioned-03640a83',
-            'cosmosDbId': '/subscriptions/80be3961-0521-4a0a-8570-5cd5a4e2f98c/resourceGroups/cosmos-bugbash-rg13/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-mongodb-provisioned-03640a83',
-            'policyId': '/subscriptions/80be3961-0521-4a0a-8570-5cd5a4e2f98c/resourceGroups/cosmos-bugbash-rg13/providers/Microsoft.DataProtection/BackupVaults/shasha-cosmosvault/backupPolicies/newpol',
+            'cosmosDbName': 'cosmos-nosql-contin-04630249',
+            'cosmosDbId': '/subscriptions/80be3961-0521-4a0a-8570-5cd5a4e2f98c/resourceGroups/cosmos-bugbash-rg13/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-nosql-contin-04630249',
+            'policyId': '/subscriptions/80be3961-0521-4a0a-8570-5cd5a4e2f98c/resourceGroups/cosmos-bugbash-rg13/providers/Microsoft.DataProtection/BackupVaults/shasha-cosmosvault/backupPolicies/cosmosdbpolicy',
             'policyRuleName': 'BackupWeekly',
             'targetCosmosDbId': '/subscriptions/80be3961-0521-4a0a-8570-5cd5a4e2f98c/resourceGroups/cosmos-bugbash-rg13/providers/Microsoft.DocumentDB/databaseAccounts/cosmos-nosql-contin-13-sc73yna4',
         })
@@ -251,20 +262,13 @@ class CosmosDBBackupAndRestoreScenarioTest(ScenarioTest):
             "backupInstanceName": backup_instance_json["backup_instance_name"]
         })
 
-        # Uncomment if validate-for-backup fails due to permission error. Only uncomment when running live.
-        # test.cmd('az dataprotection backup-instance update-msi-permissions '
-        #          '-g "{rg}" '
-        #          '--vault-name "{vaultName}" '
-        #          '--backup-instance "{backupInstance}" '
-        #          '--datasource-type "{dataSourceType}" '
-        #          '--permissions-scope "{permissionsScope}" '
-        #          '--operation "{operation}" --yes')
+        # Verify backup instance has data_source_set_info populated (enableDataSourceSetInfo=true)
+        test.assertIsNotNone(backup_instance_json['properties'].get('data_source_set_info'),
+                             "Backup instance should have data_source_set_info for CosmosDB")
 
         backup_instance_validate_create(test)
 
         # --- Step 3: Trigger ad-hoc backup and track to completion ---
-        # wait_for_job_exclusivity_on_datasource(test)
-
         adhoc_backup_response = test.cmd('az dataprotection backup-instance adhoc-backup '
                                          '-n {backupInstanceName} -g {rg} --vault-name {vaultName} --rule-name "{policyRuleName}"').get_output_in_json()
         test.kwargs.update({"jobId": adhoc_backup_response["jobId"]})
@@ -284,16 +288,9 @@ class CosmosDBBackupAndRestoreScenarioTest(ScenarioTest):
                                    '--recovery-point-id "{recoveryPointId}" --target-resource-id "{targetCosmosDbId}"').get_output_in_json()
         test.kwargs.update({"restoreRequest": restore_request})
 
-        # Uncomment if validate-for-restore fails due to permission error. Only uncomment when running live.
-        # test.cmd('az dataprotection backup-instance update-msi-permissions '
-        #          '-g "{rg}" '
-        #          '--vault-name "{vaultName}" '
-        #          '--restore-request-object "{restoreRequest}" '
-        #          '--datasource-type "{dataSourceType}" '
-        #          '--permissions-scope "{permissionsScope}" '
-        #          '--operation "Restore" --yes')
-
-        test.cmd('az dataprotection backup-instance validate-for-restore -g "{rg}" --vault-name "{vaultName}" -n "{backupInstanceName}" --restore-request-object "{restoreRequest}"')
+        # Verify restore request has datasource_set_info (enableDataSourceSetInfo=true)
+        test.assertIsNotNone(restore_request.get('restore_target_info', {}).get('datasource_set_info'),
+                             "Restore request should have datasource_set_info for CosmosDB")
 
         # Ensure no other jobs running on datasource. Required to avoid operation clashes.
         wait_for_job_exclusivity_on_datasource(test)
