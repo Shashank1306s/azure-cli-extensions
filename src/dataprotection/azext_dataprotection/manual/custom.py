@@ -1020,7 +1020,7 @@ def restore_initialize_for_data_recovery(cmd, datasource_type, source_datastore,
     datasource_id = helper.validate_and_set_datasource_id_in_restore_request(cmd, target_resource_id, backup_instance_id)
     restore_request["restore_target_info"]["datasource_info"] = helper.get_datasource_info(datasource_type, datasource_id, restore_location)
 
-    if manifest["isProxyResource"] or manifest["enableDataSourceSetInfo"]:
+    if manifest["isProxyResource"]:
         restore_request["restore_target_info"]["datasource_set_info"] = helper.get_datasourceset_info(datasource_type, datasource_id, restore_location)
 
     if manifest["supportSecretStoreAuthentication"]:
