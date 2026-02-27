@@ -194,8 +194,8 @@ def get_datasourceset_info(datasource_type, resource_id, resource_location):
         resource_uri = resource_id
         resource_id_return = resource_id
 
-    # For ADLS, Blob with enableDataSourceSetInfo, datasourceset info should match datasource info
-    if datasource_type in ["AzureDataLakeStorage", "AzureBlob"] and manifest["enableDataSourceSetInfo"]:
+    # For ADLS, Blob and CosmosDB with enableDataSourceSetInfo, datasourceset info should match datasource info
+    if datasource_type in ["AzureDataLakeStorage", "AzureBlob", "AzureCosmosDB"] and manifest["enableDataSourceSetInfo"]:
         resource_name = resource_id.split("/")[-1]
         resource_type = manifest["resourceType"]
         resource_uri = resource_id

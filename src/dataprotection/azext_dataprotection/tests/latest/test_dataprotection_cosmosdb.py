@@ -132,9 +132,19 @@ class CosmosDBBackupInstanceInitializeTest(ScenarioTest):
         test.assertEqual(ds_info.get('resource_name'), 'cosmos-mongodb-provisioned-03640a83')
         test.assertEqual(ds_info.get('object_type'), 'Datasource')
         test.assertEqual(ds_info.get('resource_location'), 'northcentralus')
-        # Verify data_source_set_info is None (enableDataSourceSetInfo=false for CosmosDB)
+        # For enableDataSourceSetInfo=true, resource_uri should be the full resource ID
+        test.assertEqual(ds_info.get('resource_uri'), test.kwargs['cosmosDbId'],
+                         "resource_uri should equal the full resource ID for CosmosDB")
+
+        # Verify data_source_set_info is populated (enableDataSourceSetInfo=true)
         dss_info = properties.get('data_source_set_info')
-        test.assertIsNone(dss_info, "data_source_set_info should be None since enableDataSourceSetInfo=false")
+        test.assertIsNotNone(dss_info, "data_source_set_info should be populated since enableDataSourceSetInfo=true")
+        test.assertEqual(dss_info.get('object_type'), 'DatasourceSet')
+        test.assertEqual(dss_info.get('datasource_type'), 'Microsoft.DocumentDB/databaseAccounts')
+        test.assertEqual(dss_info.get('resource_name'), 'cosmos-mongodb-provisioned-03640a83')
+        test.assertEqual(dss_info.get('resource_type'), 'Microsoft.DocumentDB/databaseAccounts')
+        test.assertEqual(dss_info.get('resource_id'), test.kwargs['cosmosDbId'])
+        test.assertEqual(dss_info.get('resource_uri'), test.kwargs['cosmosDbId'])
 
         # Verify policy_info
         policy_info = properties.get('policy_info', {})
@@ -188,9 +198,12 @@ class CosmosDBRestoreInitializeTest(ScenarioTest):
         test.assertEqual(ds_info.get('resource_name'), 'cosmos-nosql-contin-13-sc73yna4')
         test.assertEqual(ds_info.get('resource_id'), test.kwargs['targetResourceId'])
 
-        # CosmosDB has enableDataSourceSetInfo=false, so datasource_set_info should NOT be in restore target
+        # CosmosDB has enableDataSourceSetInfo=true, so datasource_set_info should be in restore target
         dss_info = rti.get('datasource_set_info')
-        test.assertIsNone(dss_info, "datasource_set_info should be None for CosmosDB (enableDataSourceSetInfo=false)")
+        test.assertIsNotNone(dss_info, "datasource_set_info should be present for CosmosDB (enableDataSourceSetInfo=true)")
+        test.assertEqual(dss_info.get('object_type'), 'DatasourceSet')
+        test.assertEqual(dss_info.get('datasource_type'), 'Microsoft.DocumentDB/databaseAccounts')
+        test.assertEqual(dss_info.get('resource_name'), 'cosmos-nosql-contin-13-sc73yna4')
         test.assertEqual(dss_info.get('resource_id'), test.kwargs['targetResourceId'])
 
 
@@ -245,9 +258,9 @@ class CosmosDBBackupAndRestoreScenarioTest(ScenarioTest):
             "backupInstanceName": backup_instance_json["backup_instance_name"]
         })
 
-        # Verify data_source_set_info is None (enableDataSourceSetInfo=false for CosmosDB)
-        test.assertIsNone(backup_instance_json['properties'].get('data_source_set_info'),
-                          "data_source_set_info should be None since enableDataSourceSetInfo=false")
+        # Verify backup instance has data_source_set_info populated (enableDataSourceSetInfo=true)
+        test.assertIsNotNone(backup_instance_json['properties'].get('data_source_set_info'),
+                             "Backup instance should have data_source_set_info for CosmosDB")
 
         backup_instance_validate_create(test)
 
@@ -271,9 +284,9 @@ class CosmosDBBackupAndRestoreScenarioTest(ScenarioTest):
                                    '--recovery-point-id "{recoveryPointId}" --target-resource-id "{targetCosmosDbId}"').get_output_in_json()
         test.kwargs.update({"restoreRequest": restore_request})
 
-        # Verify datasource_set_info is absent (enableDataSourceSetInfo=false for CosmosDB)
-        test.assertIsNone(restore_request.get('restore_target_info', {}).get('datasource_set_info'),
-                          "datasource_set_info should be None since enableDataSourceSetInfo=false")
+        # Verify restore request has datasource_set_info (enableDataSourceSetInfo=true)
+        test.assertIsNotNone(restore_request.get('restore_target_info', {}).get('datasource_set_info'),
+                             "Restore request should have datasource_set_info for CosmosDB")
 
         # Ensure no other jobs running on datasource. Required to avoid operation clashes.
         wait_for_job_exclusivity_on_datasource(test)
