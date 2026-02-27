@@ -6,7 +6,7 @@
 manifest = '''
 {
   "isProxyResource": false,
-  "enableDataSourceSetInfo": true,
+  "enableDataSourceSetInfo": false,
   "resourceType": "Microsoft.DocumentDB/databaseAccounts",
   "parentResourceType": "Microsoft.DocumentDB/databaseAccounts",
   "datasourceType": "Microsoft.DocumentDB/databaseAccounts",
